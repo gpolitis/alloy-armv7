@@ -30,6 +30,13 @@ trap cleanup EXIT
 
 git clone -q --depth 1 --branch "$tag" https://github.com/grafana/alloy.git "$work/alloy"
 
+# 32-bit fixes (see patches/README.md). git apply fails loudly if one no longer applies.
+here="$(cd "$(dirname "$0")" && pwd)"
+for p in "$here"/patches/*.patch; do
+  echo "applying $(basename "$p")"
+  git -C "$work/alloy" apply "$p"
+done
+
 if [ -z "$image" ]; then
   # Use the same build image upstream CI uses for this tag.
   image="$(grep -oE 'grafana/alloy-build-image:[^ "]+' "$work/alloy/.github/workflows/build.yml" | head -1)"
@@ -45,10 +52,6 @@ docker run --rm \
   -e USE_CONTAINER=0 -e GOFLAGS="-p=$par" \
   "$image" bash -euo pipefail -c "
     git config --global --add safe.directory /src
-    # The Makefile always adds the gore2regex tag. go-re2 reserves 1 GiB of
-    # address space when its package initializes, which fails in a 32-bit
-    # process (panic: cannot allocate memory). Drop it; regexps then use stdlib.
-    sed -i 's/^override GO_TAGS := \$(strip gore2regex \$(GO_TAGS))\$/# gore2regex dropped for 32-bit ARM (alloy-armv7)/' Makefile
     make alloy RELEASE_BUILD=1 VERSION=$tag GOOS=linux GOARCH=arm GOARM=7 \
       CGO_ENABLED=$cgo GO_TAGS='$tags'
     if go version -m build/alloy | grep -q gore2regex; then
