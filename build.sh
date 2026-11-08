@@ -20,7 +20,13 @@ par="${GO_PARALLEL:-2}"
 version="${tag#v}"
 image="${BUILD_IMAGE:-}"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+# The build container writes root-owned files into the clone on Linux hosts,
+# so delete them from a container too, then the (now empty) temp dir.
+cleanup() {
+  [ -n "$image" ] && docker run --rm -v "$work":/w "$image" rm -rf /w/alloy || true
+  rm -rf "$work"
+}
+trap cleanup EXIT
 
 git clone -q --depth 1 --branch "$tag" https://github.com/grafana/alloy.git "$work/alloy"
 
