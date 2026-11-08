@@ -1,0 +1,8 @@
+[Unit]
+Description=Update Alloy from github.com/gpolitis/alloy-armv7 releases
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alloy-armv7-update

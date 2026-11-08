@@ -1,0 +1,29 @@
+#!/bin/sh
+# Install the newest github.com/gpolitis/alloy-armv7 release if it's newer than
+# the installed alloy package. Verifies the SHA256SUMS before installing.
+# Run as root (the systemd timer next to this file does it daily).
+set -eu
+
+repo="${ALLOY_ARMV7_REPO:-gpolitis/alloy-armv7}"
+api="https://api.github.com/repos/$repo/releases/latest"
+
+tag="$(curl -fsSL "$api" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+[ -n "$tag" ] || { echo "couldn't read the latest release of $repo" >&2; exit 1; }
+want="${tag#v}-1"
+have="$(dpkg-query -W -f='${Version}' alloy 2>/dev/null || true)"
+
+if [ -n "$have" ] && dpkg --compare-versions "$have" ge "$want"; then
+  echo "alloy $have is up to date (latest $tag)"
+  exit 0
+fi
+
+deb="alloy_${want}_armhf.deb"
+base="https://github.com/$repo/releases/download/$tag"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cd "$tmp"
+curl -fsSLO "$base/$deb"
+curl -fsSLO "$base/SHA256SUMS"
+grep " $deb\$" SHA256SUMS | sha256sum -c -
+echo "installing alloy $want (was: ${have:-not installed})"
+DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold "./$deb"
